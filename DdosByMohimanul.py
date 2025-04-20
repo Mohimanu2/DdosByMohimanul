@@ -9,6 +9,25 @@ from aiohttp import ClientTimeout
 from collections import defaultdict
 import json
 
+# Predefined Proxy List (Real-time proxies)
+proxies = [
+    "http://51.15.227.220:3128",
+    "http://51.79.50.31:9300",
+    "http://178.62.193.19:8080",
+    "http://51.158.68.133:8811",
+    "http://185.106.232.93:8080",
+    "http://185.186.254.69:8080",
+    "http://95.179.147.217:3128",
+    "http://185.107.232.110:8080",
+    "http://51.159.45.84:3128",
+    "http://51.159.16.51:3128",
+    "http://185.220.101.39:8080",
+    "http://185.107.232.126:8080",
+    "http://185.107.232.127:8080",
+    "http://52.49.123.56:3128",
+    "http://185.6.233.2:8080"
+]
+
 # User-Agent list
 user_agents = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
@@ -23,7 +42,7 @@ user_agents = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:90.0) Gecko/20100101 Firefox/90.0"
 ]
 
-# Function to fetch proxies
+# Function to fetch proxies (if you still want this functionality)
 def fetch_proxies():
     url = 'https://www.proxy-list.download/api/v1/get?type=http'
     try:
@@ -33,7 +52,7 @@ def fetch_proxies():
             return [f"http://{proxy}" for proxy in proxy_list if proxy]
     except Exception as e:
         print(colored(f"Failed to fetch proxies: {e}", "red"))
-    return []
+    return proxies  # Return predefined proxies if fetching fails
 
 # Advanced Proxy Health Check
 async def check_proxy_health(session, proxy):
@@ -101,12 +120,11 @@ async def attack(session, url, log_file=None, request_type="GET", payload=None, 
                 "Referer": random.choice(["https://google.com", "https://bing.com", ""]),
             }
             
-            # Select proxy and check health
-            proxy = random.choice(proxies)
-            if proxy:
-                proxy_health = await check_proxy_health(session, proxy)
-                if not proxy_health:
-                    continue  # Skip proxy if it's not healthy
+            # Ensure we have proxies available
+            if proxies:
+                proxy = random.choice(proxies)
+            else:
+                proxy = None  # Use direct connection if no proxies available
 
             start_time = time.time()  # Start time for calculating response time
             try:
@@ -176,24 +194,9 @@ if __name__ == "__main__":
     workers = int(workers)
     log_file = log_file.strip() if log_file else None
 
-    # Fetch proxies
-    proxies = fetch_proxies()
-    if not proxies:
-        proxies = [None]  # Fallback to direct connection
-
     # Start the load test
     print(colored("Starting advanced ethical load test with rate limiting and exponential backoff...", "cyan"))
-
-    # Check proxy health before proceeding
-    proxies = asyncio.run(check_all_proxies(proxies))
-
     asyncio.run(main(full_url, workers, log_file, request_type, payload))
 
     # Display summary
-    print(colored(f"\nTest completed. Total Requests: {request_stats['total_requests']}", "cyan"))
-    print(colored(f"Successful Requests: {request_stats['successful_requests']}", "green"))
-    print(colored(f"Failed Requests: {request_stats['failed_requests']}", "red"))
-    print(colored(f"Rate Limit Hits: {request_stats['rate_limit_hits']}", "yellow"))
-    if request_stats['total_requests'] > 0:
-        avg_response_time = request_stats['total_response_time'] / request_stats['total_requests']
-        print(colored(f"Average Response Time: {avg_response_time:.2f}s", "yellow"))
+    print(colored(f"\nTest completed. Total
