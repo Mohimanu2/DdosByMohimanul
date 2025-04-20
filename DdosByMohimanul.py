@@ -1,10 +1,12 @@
 import aiohttp
 import asyncio
 import random
+import argparse
 import time
 from termcolor import colored, cprint
-from aiohttp import ClientTimeout
+from aiohttp import ClientTimeout, TCPConnector
 from collections import defaultdict
+import ssl
 
 # User-Agent list
 user_agents = [
@@ -26,14 +28,14 @@ request_stats = defaultdict(int)
 # Semaphore for concurrent requests
 sem = asyncio.Semaphore(1000)
 
-# Function to display banner
+# Banner
 def display_banner():
-    cprint("\n" + "=" * 50, "cyan")
+    cprint("\n" + "="*50, "cyan")
     cprint("Made by Mohimanul", "green", attrs=["bold"])
     cprint("The Virtual Myst", "yellow", attrs=["bold"])
-    cprint("=" * 50 + "\n", "cyan")
+    cprint("="*50 + "\n", "cyan")
 
-# Function to apply rate limiting with exponential backoff
+# Rate limit handling
 async def apply_rate_limit(response, backoff_multiplier):
     if response.status == 429:
         retry_after = response.headers.get('Retry-After')
@@ -41,6 +43,7 @@ async def apply_rate_limit(response, backoff_multiplier):
             wait_time = int(retry_after)
         else:
             wait_time = random.uniform(2, 5) * backoff_multiplier
+
         print(colored(f"Rate limit hit. Retrying after {wait_time:.2f} seconds...", "yellow"))
         await asyncio.sleep(wait_time)
         return True, backoff_multiplier * 2
@@ -63,11 +66,13 @@ async def attack(session, url, log_file=None, request_type="GET", payload=None):
             start_time = time.time()
             try:
                 timeout = ClientTimeout(total=10)
+
                 if request_type == "GET":
                     async with session.get(url, headers=headers, timeout=timeout) as response:
                         rate_limit_hit, backoff_multiplier = await apply_rate_limit(response, backoff_multiplier)
                         if rate_limit_hit:
                             continue
+
                         response_time = time.time() - start_time
                         request_stats['total_requests'] += 1
                         request_stats['successful_requests'] += 1
@@ -79,6 +84,7 @@ async def attack(session, url, log_file=None, request_type="GET", payload=None):
                         rate_limit_hit, backoff_multiplier = await apply_rate_limit(response, backoff_multiplier)
                         if rate_limit_hit:
                             continue
+
                         response_time = time.time() - start_time
                         request_stats['total_requests'] += 1
                         request_stats['successful_requests'] += 1
@@ -93,13 +99,17 @@ async def attack(session, url, log_file=None, request_type="GET", payload=None):
 
             await asyncio.sleep(random.uniform(0.1, 0.5))
 
-# Main function
+# Main async task runner
 async def main(url, workers, log_file, request_type, payload):
-    async with aiohttp.ClientSession() as session:
+    ssl_context = ssl.create_default_context()
+    ssl_context.set_ciphers('DEFAULT@SECLEVEL=1')
+
+    connector = TCPConnector(ssl=ssl_context)
+    async with aiohttp.ClientSession(connector=connector) as session:
         tasks = [attack(session, url, log_file, request_type, payload) for _ in range(workers)]
         await asyncio.gather(*tasks)
 
-# Script entry point
+# Entry
 if __name__ == "__main__":
     display_banner()
 
@@ -119,9 +129,10 @@ if __name__ == "__main__":
     workers = int(workers)
     log_file = log_file.strip() if log_file else None
 
-    print(colored("Starting advanced ethical load test without proxies...", "cyan"))
+    print(colored("Starting advanced ethical load test with rate limiting and exponential backoff...", "cyan"))
     asyncio.run(main(full_url, workers, log_file, request_type, payload))
 
+    # Final stats
     print(colored(f"\nTest completed. Total Requests: {request_stats['total_requests']}", "cyan"))
     print(colored(f"Successful Requests: {request_stats['successful_requests']}", "green"))
     print(colored(f"Failed Requests: {request_stats['failed_requests']}", "red"))
