@@ -54,7 +54,7 @@ sem = asyncio.Semaphore(1000)  # Max concurrent requests
 # Function to display banner
 def display_banner():
     cprint("\n" + "="*50, "cyan")
-    cprint("Made by Mohimanul", "green", attrs=["bold"])
+    cprint("Made-by-Mohimanul", "green", attrs=["bold"])
     cprint("The Virtual Myst", "yellow", attrs=["bold"])
     cprint("="*50 + "\n", "cyan")
 
