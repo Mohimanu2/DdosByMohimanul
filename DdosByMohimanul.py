@@ -46,9 +46,10 @@ async def check_proxy_health(session, proxy):
     return None
 
 # Function to check multiple proxies concurrently
-async def check_all_proxies(session, proxies):
-    tasks = [check_proxy_health(session, proxy) for proxy in proxies]
-    healthy_proxies = await asyncio.gather(*tasks)
+async def check_all_proxies(proxies):
+    async with aiohttp.ClientSession() as session:
+        tasks = [check_proxy_health(session, proxy) for proxy in proxies]
+        healthy_proxies = await asyncio.gather(*tasks)
     return [proxy for proxy in healthy_proxies if proxy is not None]
 
 # Request statistics
@@ -182,10 +183,9 @@ if __name__ == "__main__":
 
     # Start the load test
     print(colored("Starting advanced ethical load test with rate limiting and exponential backoff...", "cyan"))
-    
+
     # Check proxy health before proceeding
-    async with aiohttp.ClientSession() as session:
-        proxies = await check_all_proxies(session, proxies)
+    proxies = asyncio.run(check_all_proxies(proxies))
 
     asyncio.run(main(full_url, workers, log_file, request_type, payload))
 
